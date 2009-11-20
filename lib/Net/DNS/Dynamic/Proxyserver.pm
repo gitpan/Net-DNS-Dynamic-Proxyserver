@@ -1,6 +1,6 @@
 package Net::DNS::Dynamic::Proxyserver;
 
-our $VERSION = '1.0';
+our $VERSION = '1.1';
 
 use strict;
 use warnings;
@@ -49,6 +49,9 @@ addresses into a SQL databases and let your DNS proxy-server answer queries from
 
      uid => 65534,
      gid => 65534,
+     
+     nameservers      => [ '127.0.0.1', '192.168.1.110' ],
+     nameservers_port => 53,
 
      ask_etc_hosts => { ttl => 3600 },
 
@@ -66,7 +69,7 @@ addresses into a SQL databases and let your DNS proxy-server answer queries from
 
  $proxy->run();
 
-=head2 WORKFLOW
+=head1 WORKFLOW
 
 At startup, the file /etc/resolv.conf will be read and parsed. All defined nameservers will
 be used to proxy through queries that can not be answered locally. If you define the 'ask_etc_hosts'
@@ -85,11 +88,11 @@ Then, if the query could not be answered from the hosts-file and/or the database
 will be handed over to the nameserves from your /etc/resolv.conf and the answer will be looped
 trough to the caller.
 
-=head2 Arguments to new()
+=head1 Arguments to new()
 
 The following options may be passed over when creating a new object:
 
-=head3 debug INT
+=head2 debug Int
 
 When the debug option is set to 1 or higher (1-3), this module will print out some
 helpful debug informations to STDOUT. If you like, redirect the output to a
@@ -101,7 +104,7 @@ A debug value of 1 prints out some basic action logging. A value of 2 and
 higher turns on nameserver verbosity, a value of 3 and higher turns on resolver
 debug output.
 
-=head3 host String
+=head2 host String
 
 You can specify the IP address to bind to with this option. If not defined, the
 server binds to all interfaces.
@@ -114,7 +117,7 @@ Examples:
 
  my $proxy = Net::DNS::Dynamic::Proxyserver->new( host => '*' );
 
-=head3 port INT
+=head2 port Int
 
 The tcp & udp port to run the DNS server under. Default is port 53, which means
 that you need to start your script as user root (all ports below 1000 need root
@@ -122,21 +125,40 @@ rights).
 
   my $proxy = Net::DNS::Dynamic::Proxyserver->new( port => 5353 );
 
-=head3 uid INT
+=head2 uid Int
 
 The user id to switch to, after the socket has been created. Could be set to
 the uid of 'nobody' (65534 on some systems).
 
   my $proxy = Net::DNS::Dynamic::Proxyserver->new( uid => 65534 );
 
-=head3 gid INT
+=head2 gid Int
 
 The group id to switch to, after the socket has been created. Could be set to
 the gid of 'nogroup' (65534 on some systems).
 
   my $proxy = Net::DNS::Dynamic::Proxyserver->new( gid => 65534 );
 
-=head3 ask_etc_hosts HashRef
+=head2 nameservers ArrayRef
+
+This argument allows to defined one or more nameservers to forward any DNS question
+which can not be locally answered. Must be an Arrayref of IP addresses.
+
+If you do not specify nameservers this way, the file /etc/resolv.conf will be read
+instead and any nameserver defined there will be used.
+
+ my $proxy = Net::DNS::Dynamic::Proxyserver->new( nameservers => [ '127.0.0.1', '192.168.1.110' ] );
+
+=head2 nameservers_port Int
+
+Specify the port of the remote nameservers. By default, this is set to 53 (the standard port),
+but you can ovewrite it if you run a nameserver on a different port. This port will be used
+for every nameserver - due to a limitation of Net::DNS::Resolver which cant deal with ports
+for each individual nameserver.
+
+ my $proxy = Net::DNS::Dynamic::Proxyserver->new( nameservers_port => 5353 );
+
+=head2 ask_etc_hosts HashRef
 
 If you'd like to anwer DNS queries from entries in your /etc/hosts file, then
 define this argument like so:
@@ -151,7 +173,7 @@ If 'ask_etc_hosts' is not defined, no queries to /etc/hosts will be made.
 If you make changes to your /etc/hosts file, you can send your script a
 signal HUP and it will re-read the file on the fly.
 
-=head3 ask_sql HashRef
+=head2 ask_sql HashRef
 
 If you'd like to answer DNS queries from entries in your SQL database, then define
 this argument like so:
@@ -202,7 +224,8 @@ has ask_etc_hosts	=> ( is => 'ro', isa => 'HashRef', required => 0 );
 has ask_sql			=> ( is => 'ro', isa => 'Net.DNS.Dynamic.Proxyserver.ValidSQLArguments', required => 0 );
 
 has addrs			=> ( is => 'rw', isa => 'HashRef', init_arg => undef );
-has dns_servers		=> ( is => 'rw', isa => 'ArrayRef', init_arg => undef );
+has forwarders	 	=> ( is => 'rw', isa => 'ArrayRef', required => 0, init_arg => 'nameservers' );
+has forwarders_port => ( is => 'ro', isa => 'Int', required => 0, init_arg => 'nameservers_port' );
 has dbh				=> ( is => 'rw', isa => 'Object', init_arg => undef );
 
 has nameserver		=> ( is => 'rw', isa => 'Net::DNS::Nameserver', init_arg => undef );
@@ -239,7 +262,8 @@ sub BUILD {
 	#
 	my $res = Net::DNS::Resolver->new(
 
-		nameservers => [ @{$self->dns_servers} ],
+		nameservers => [ @{$self->forwarders} ],
+		port		=> $self->forwarders_port || 53,
 		recurse     => 1,
 		debug       => ($self->debug > 2 ? 1 : 0),
 	);
@@ -339,7 +363,7 @@ sub log {
 sub read_config {
 	my ( $self ) = shift;
 
-	$self->dns_servers([ $self->parse_resolv_conf() ]);		# /etc/resolv.conf
+	$self->forwarders([ $self->parse_resolv_conf() ]);		# /etc/resolv.conf
 	$self->addrs({ $self->parse_etc_hosts() });				# /etc/hosts
 }
 
@@ -437,6 +461,8 @@ sub parse_etc_hosts {
 
 sub parse_resolv_conf {
 	my ( $self ) = shift;
+	
+	return @{$self->forwarders} if $self->forwarders;
 
 	$self->log('reading /etc/resolv.conf file');
 

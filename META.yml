@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Net-DNS-Dynamic-Proxyserver
-version:            1.0
+version:            1.1
 abstract:           A dynamic DNS proxy server.
 author:
     - Marc Sebastian Jakobs
