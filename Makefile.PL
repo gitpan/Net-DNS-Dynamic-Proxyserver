@@ -19,5 +19,6 @@ WriteMakefile(
 		'Net::DNS::Nameserver'	=> 749,
 		'Moose'				=> 0.92,
 		'Moose::Util::TypeConstraints' => 0.92,
+		'DBI'				=> 1.601,
     }
 );

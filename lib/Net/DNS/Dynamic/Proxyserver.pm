@@ -1,6 +1,6 @@
 package Net::DNS::Dynamic::Proxyserver;
 
-our $VERSION = '1.1';
+our $VERSION = '1.2';
 
 use strict;
 use warnings;
@@ -528,7 +528,7 @@ sub query_sql {
 
 =head1 AUTHOR
 
-Marc Sebastian Jakobs <mpelzer@cpan.org>
+Marc Sebastian Jakobs <maja@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
